@@ -7,9 +7,9 @@ int esc=1000;
 byte data, trash;
 
 void setup() {
-  Serial.begin(57600);             //Inicia comunicação serial
+  Serial.begin(9600);              //Inicia comunicação serial Bluetooth
     DDRD |= B10000000;             // Porta 7 output
-    DDRB |= B00101111;             // Porta 13 output
+    DDRB |= B00101111;             // Porta 8, 9, 10, 11, e 13 output
 
   Serial.println("Envie: 'd' para aumentar 10% | 'a' para diminuir 10% | '0' para parar o motor");
 
@@ -18,26 +18,26 @@ void setup() {
 
     PCICR |= (1 << PCIE2);         // Registeador PCIE0  em alto para habilitar scaneamento da interrupção através do PCMSK0
     PCMSK2 |= (1 << PCINT18);      // Bit 18 do Registrador PCINT0 em alto (entrada digital 2)  para causar uma interrupção em qualquer mudança.
-    PCMSK2 |= (1 << PCINT19);      // Bit 18 do Registrador PCINT0 em alto (entrada digital 2)  para causar uma interrupção em qualquer mudança.
+    PCMSK2 |= (1 << PCINT19);      // Bit 19 do Registrador PCINT0 em alto (entrada digital 3)  para causar uma interrupção em qualquer mudança.
 }
 
 void loop() {
   if(Serial.available() > 0){
-    data = Serial.read();                               //Faz a leitura da entrada do teclado
-    delay(100);                                         //Espera a chegada dos demais bytes
-    while(Serial.available() > 0)trash = Serial.read(); //Limpa buffer serial (descarta bytes extras)
-    trash = 0;
+    data = Serial.read();                               // Faz a leitura da entrada do teclado
+    delay(100);                                         // Espera a chegada dos demais bytes
+    while(Serial.available() > 0)trash = Serial.read(); // Limpa buffer serial (descarta bytes extras)
+    trash = 0;											                    // Variável para lixo da cominicação serial
     if(data == 'd'){
-      if(esc<2000)esc += 100;
-      Serial.print("Aumenta em 10%. Atualmente está em: "); Serial.println((esc-1000)/10);
+      if(esc<1500)esc += 50;
+      Serial.print("Aumenta em 10%. Atualmente está em: "); Serial.println((esc-1000)/5);
     }
     if(data == 'a'){
-      if(esc>1000)esc -= 100;
-      Serial.print("Diminui em 10%. Atualmente está em: "); Serial.println((esc-1000)/10);
+      if(esc>1000)esc -= 50;
+      Serial.print("Diminui em 10%. Atualmente está em: "); Serial.println((esc-1000)/5);
     }
     if(data == '0'){
       esc = 1000;
-      Serial.print("Esc em zerado. Atualmente está em: "); Serial.println((esc-1000)/10);
+      Serial.print("Esc em zerado. Atualmente está em: "); Serial.println((esc-1000)/5);
     }
   }
 
@@ -49,41 +49,41 @@ void loop() {
 
   while(PORTD >= 64){                                   // Enquanto tiver em alto
   esc_loop_timer = micros();                            //Lê o tempo atual
-  if(timer_channel <= esc_loop_timer)PORTD &= B01111111;  // Quando o atual for maior que estabelecido, coloca em baixo
+  if(timer_channel <= esc_loop_timer)PORTD &= B01111111;// Quando o atual for maior que estabelecido, coloca em baixo
   }
 
-  switch (esc) {
+  switch (esc) {		//  Lock up table para vizualização com as LEDs
     case 1000:
       PORTB = B00000000;
       break;
-    case 1100:
+    case 1050:
       PORTB = B00000001;
       break;
-    case 1200:
+    case 1100:
       PORTB = B00000010;
       break;
-    case 1300:
+    case 1150:
       PORTB = B00000011;
       break;
-    case 1400:
+    case 1200:
       PORTB = B00000100;
       break;
-    case 1500:
+    case 1250:
       PORTB = B00000101;
       break;
-    case 1600:
+    case 1300:
       PORTB = B00000110;
       break;
-    case 1700:
+    case 1350:
       PORTB = B00000111;
       break;
-    case 1800:
+    case 1400:
       PORTB = B00001000;
       break;
-    case 1900:
+    case 1450:
       PORTB = B00001001;
       break;
-    case 2000:
+    case 1500:
       PORTB = B00001010;
       break;
     default:
@@ -94,16 +94,16 @@ void loop() {
 
 ISR(PCINT2_vect){
   if(PIND & B00000100){
-    if(esc<2000 & (millis()>button_timer)){
-      esc += 100;
-      Serial.print("Aumenta em 10%. Atualmente está em: "); Serial.println((esc-1000)/10);
+    if(esc<1500 & (millis()>button_timer)){
+      esc += 50;
+      Serial.print("Aumenta em 10%. Atualmente está em: "); Serial.println((esc-1000)/5);
       button_timer = millis()+2000;
     }
   }
   if(PIND & B00001000){
     if (millis()>button_timer){
       esc = 1000;
-      Serial.print("Esc em zerado. Atualmente está em: "); Serial.println((esc-1000)/10);
+      Serial.print("Esc em zerado. Atualmente está em: "); Serial.println((esc-1000)/5);
       button_timer = millis()+2000;
     }
   }
