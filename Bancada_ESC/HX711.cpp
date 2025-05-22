@@ -1,16 +1,14 @@
 // --- Configuração de pinos e parâmetros ---
 #include "HX711.hpp"
 
-#define HX711_DOUT_PIN  3   // conecta ao DOUT do módulo
-#define HX711_SCK_PIN   2   // conecta ao SCK do módulo
+//#define HX711_DOUT_PIN  3   // conecta ao DOUT do módulo
+//#define HX711_SCK_PIN   2   // conecta ao SCK do módulo
 #define GAIN_PULSES     1   // 1 pulso = canal A ganho 128
 
-long offset = 0;      // “tare” zero
-float scale  = 1.0;   // fator de calibração (raw/gramas)
+HX711::HX711(const uint8_t _pin_DT, )
 
 // --- Função de inicialização ---
 void setup() {
-  Serial.begin(9600);
   pinMode(HX711_SCK_PIN, OUTPUT);
   pinMode(HX711_DOUT_PIN, INPUT);
   digitalWrite(HX711_SCK_PIN, LOW);
