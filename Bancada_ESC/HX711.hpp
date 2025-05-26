@@ -4,19 +4,26 @@
 #include "Sensor.hpp"
 #include "Arduino.h"
 
-#define HX711_DOUT_PIN  3   // conecta ao DOUT do módulo
-#define HX711_SCK_PIN   2   // conecta ao SCK do módulo
 #define GAIN_PULSES     1   // 1 pulso = canal A ganho 128
+#define N_amostras      10  // #Amostras para média
 
 class HX711 : public Sensor{
 	
 public:
-	HX711(const uint8_t, const uint8_t);	//Dout , SCK 
-	~HX711() = default;
-	int32_t read() override;
-	void sample();
-
+	HX711(const uint8_t PIN_DOUT, const uint8_t PIN_CLK);	//Dout , SCK 
+	~HX711() override = default;
+	
+	int16_t read() override;
+	long	calibra() override;
 private:
-	long offset = 0;      // “tare” zero
-	float scale  = 1.0;   // fator de calibração (raw/gramas)
+	uint8_t	_PIN_DOUT;
+	uint8_t _PIN_SCK;
+	
+	unsigned long	value = 0;	// Valor raw unitario
+	int32_t			sum	= 0;			// Soma de amostras
+	long 			offset;      		// “tare” zero
+	float		 	scale;   		// fator de calibração (raw/gramas)
+	
+	int32_t tare();
+	int32_t readRaw();
 };

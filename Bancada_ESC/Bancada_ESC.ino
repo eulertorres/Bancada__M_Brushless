@@ -1,13 +1,31 @@
-// Programinha feito por Euler Torres 11_07_22 EDRA
-// Bancada de teste aeropropulsão
+// Programinha feito por Euler Torres 25_05_25
+// Bancada de teste propulsão
+#include <Arduino.h>
+#include "HX711.hpp"
 
 unsigned long loop_timer, esc_loop_timer, timer_channel, button_timer;
 int esc=1000;
 //bool lock=false;
 byte data, trash;
 
+HX711 Balanca(3, 2);  //Dt, CSK
+
+Sensor* sensores[] = {
+	&Balanca
+};
+
+const uint8_t N_sensores = sizeof(sensores)/sizeof(sensores[0]);
+
+void amostra() {
+int16_t thrust;
+	
+	for (auto sensor : sensores){
+		
+	}
+}
+
 void setup() {
-  Serial.begin(9600);              //Inicia comunicação serial Bluetooth
+  Serial.begin(115200);              //Inicia comunicação serial Bluetooth
     DDRD |= B10000000;             // Porta 7 output
     //DDRB |= B00101111;             // Porta 8, 9, 10, 11, e 13 output
 
@@ -43,6 +61,9 @@ void loop() {
 
   while(micros() - loop_timer < 20000);                  // Garante que teremos 250hz de atualização
   loop_timer = micros();                                // Zera o contador do loop
+
+  Serial.print("Leitura Balanca: "); Serial.println(Balanca.read());
+
   PORTD |= B10000000;                                   // Pulso alto pro ESC
   timer_channel = esc + loop_timer;                     // Define o tempo de alto
 

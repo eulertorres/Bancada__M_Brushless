@@ -1,72 +1,54 @@
 // --- Configuração de pinos e parâmetros ---
 #include "HX711.hpp"
 
-//#define HX711_DOUT_PIN  3   // conecta ao DOUT do módulo
-//#define HX711_SCK_PIN   2   // conecta ao SCK do módulo
-#define GAIN_PULSES     1   // 1 pulso = canal A ganho 128
-
-HX711::HX711(const uint8_t _pin_DT, )
-
-// --- Função de inicialização ---
-void setup() {
-  pinMode(HX711_SCK_PIN, OUTPUT);
-  pinMode(HX711_DOUT_PIN, INPUT);
-  digitalWrite(HX711_SCK_PIN, LOW);
-
-  // calibra offset com célula vazia
-  Serial.println("Tare: calibrando zero sem carga...");
-  offset = readRawAverage(10);
-  Serial.print("Offset ajustado para: ");
-  Serial.println(offset);
-  Serial.println("Pronto para medições.");
-}
-
-// --- Loop principal ---
-void loop() {
-  // lê valor bruto médio e converte em peso
-  long raw  = readRawAverage(10);
-  float w   = (raw - offset) / scale;
-
-  Serial.print("Bruto: ");
-  Serial.print(raw);
-  Serial.print("    Peso: ");
-  Serial.print(w, 2);
-  Serial.println(" unidades");
-  delay(500);
+HX711::HX711(const uint8_t PIN_DOUT, const uint8_t PIN_SCK) :
+	_PIN_DOUT(PIN_DOUT),
+	_PIN_SCK(PIN_SCK),
+	offset(1974),
+	scale(114.6f)
+{
+	pinMode(_PIN_DOUT, INPUT);
+	pinMode(_PIN_SCK, OUTPUT);
+	digitalWrite(_PIN_SCK, LOW);	
 }
 
 // --- Lê uma única conversão de 24 bits e aplica seleção de ganho ---
-long readRaw() {
-  // aguarda DOUT ficar LOW (dado pronto)
-  while (digitalRead(HX711_DOUT_PIN) == HIGH);
-
-  unsigned long value = 0;
-  // lê 24 bits
-  for (uint8_t i = 0; i < 24; i++) {
-    digitalWrite(HX711_SCK_PIN, HIGH);
-    value <<= 1;
-    if (digitalRead(HX711_DOUT_PIN)) {
-      value |= 1;
-    }
-    digitalWrite(HX711_SCK_PIN, LOW);
-  }
-  // pulsos adicionais para ganho
-  for (uint8_t i = 0; i < GAIN_PULSES; i++) {
-    digitalWrite(HX711_SCK_PIN, HIGH);
-    digitalWrite(HX711_SCK_PIN, LOW);
-  }
-  // converte de 24 bits two’s-complement para signed long
-  if (value & 0x800000) {
-    value |= 0xFF000000;
-  }
-  return (long)value;
+int32_t HX711::readRaw() {
+	// aguarda DOUT ficar LOW (dado pronto)
+	while (digitalRead(_PIN_DOUT) == HIGH);
+	
+	value = 0;
+	// lê 24 bits
+	for (uint8_t i = 0; i < 24; i++) {
+		digitalWrite(_PIN_SCK, HIGH);
+		value <<= 1;
+		if (digitalRead(_PIN_DOUT)) {
+			value |= 1;
+		}
+		digitalWrite(_PIN_SCK, LOW);
+	}
+	// pulsos adicionais para ganho
+	for (uint8_t i = 0; i < GAIN_PULSES; i++) {
+		digitalWrite(_PIN_SCK, HIGH);
+		digitalWrite(_PIN_SCK, LOW);
+	}
+	// converte de 24 bits two’s-complement para signed long
+	if (value & 0x800000) {
+		value |= 0xFF000000;
+	}
+	return (int32_t)value;
 }
 
 // --- Lê várias vezes e retorna a média ---
-long readRawAverage(uint8_t times) {
-  long sum = 0;
-  for (uint8_t i = 0; i < times; i++) {
-    sum += readRaw();
-  }
-  return sum / times;
+int16_t HX711::read() {
+	sum = 0;
+	for (uint8_t i = 0; i < N_amostras; i++) {
+		sum += readRaw();
+	}
+	return (sum / N_amostras)/scale - offset;
+}
+
+long HX711::calibra(){
+	offset = read();
+	return offset;
 }
