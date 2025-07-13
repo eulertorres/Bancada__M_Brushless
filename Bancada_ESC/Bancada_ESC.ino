@@ -1,92 +1,298 @@
 // Programinha feito por Euler Torres 25_05_25
 // Bancada de teste propulsão
 #include <Arduino.h>
+#include <Servo.h>
+#include <SD.h>
+#include <SPI.h>
+
 #include "HX711.hpp"
+#include "LM35.hpp"
+#include "VoltDiv.hpp"
+#include "ACS712.hpp"
 
-unsigned long loop_timer, esc_loop_timer, timer_channel, button_timer;
-int esc=1000;
-//bool lock=false;
-byte data, trash;
+//=============================================================================
+// 						Definição dos pinos
+//=============================================================================
+const uint8_t buttPin	{3};
+const uint8_t HX711_DOUT{4};
+const uint8_t HX711_SCK	{5};
+const uint8_t servo_pin	{7};
+const uint8_t LED		{8};
+const uint8_t CS_SDcard	{10};
+const uint8_t TAMB_PIN	{A0};
+const uint8_t TMOT_PIN	{A1};
+const uint8_t Curr_PIN	{A2};
+const uint8_t Volt_PIN	{A3};
 
-HX711 Balanca(3, 2);  //Dt, CSK
+
+//=============================================================================
+// 							Sensores
+//=============================================================================
+
+HX711 	 Balanca(HX711_DOUT, HX711_SCK, "Empuxo");
+LM35 	 Temp_amb(TAMB_PIN, "TempAmbiente");
+LM35	 Temp_Mot(TMOT_PIN, "TempMotor");
+VoltDiv  Bateria(Volt_PIN,  "Tensao");
+ACS712   Corrente(Curr_PIN, "Corrente");
 
 Sensor* sensores[] = {
-	&Balanca
+	&Balanca,
+	&Temp_amb,
+	&Temp_Mot,
+	&Bateria,
+	&Corrente
 };
 
 const uint8_t N_sensores = sizeof(sensores)/sizeof(sensores[0]);
 
+int16_t thrust_g = 0;
+
+volatile bool botao = false;
+
+//=============================================================================
+// 						Variaveis globais
+//=============================================================================
+
+// Controle de Tempo ------------------------------------------------
+unsigned long now, lastInterrupt;
+
+// ---------------------  Controle do ESC   -------------------------
+uint16_t sample_dt = 500, min_PWM = 1500, max_PWM = 2000;
+uint8_t	 step_PWM = 1;
+Servo esc;
+bool Inverte_PWM = false;
+
+// ---------------------     Cartão SD	------------------------------------------------
+unsigned long lastSample, lastLog;
+File logfile;
+char data;
+
+// ---------------------       Debug	------------------------------------------------
+bool debugging = false;
+// ---------------------       Teste    ------------------------------------------------
+bool testRunning = false;
+uint16_t  target_PWM = 1500, ms_increasse = 80, targetPWMsample= 1500;
+unsigned long lastPWMUpdate, sampleTime = 5000;
+
+//=============================================================================
+// 						Funções auxiliares
+//=============================================================================
+
+void ProcessSerial(){
+	if (Serial.available() > 0){
+		
+		if(isDigit(Serial.peek())){
+			setPWM(Serial.parseInt());
+			Serial.read();
+			return;
+		}
+		
+		data = Serial.read();	
+		if(data == 'd'){	
+			beginTest();
+			Serial.read();
+		}
+		else if (data == 'a'){
+			showError();
+			openNewLog();
+			debugging = true;
+		}
+		else if (data == 's'){
+			debugging = false;
+			endTest();
+			Serial.read();
+		}
+	}
+}
+
+void beginTest(){
+	target_PWM = min_PWM;
+	setPWM(min_PWM);
+	openNewLog();
+	testRunning = true;
+	//Serial.println("comecou");
+	lastPWMUpdate = millis();	
+}
+
+void runTest(){
+	if(target_PWM < max_PWM){
+	// Enquanto nao chegar no máximo
+		if (target_PWM >= targetPWMsample){
+			amostra();
+			if (now - lastPWMUpdate >= sampleTime) targetPWMsample += 50;
+		}			
+		else if (now - lastPWMUpdate >= ms_increasse){
+			target_PWM++;
+			lastPWMUpdate = now;
+		}
+	} else{
+		amostra();
+		if (now - lastPWMUpdate >= sampleTime) endTest();
+	}
+	//Serial.println(target_PWM);
+	setPWM(target_PWM);	
+}
+
+void endTest(){
+	target_PWM = min_PWM;	
+	setPWM(min_PWM);
+	closeCurrentLog();
+	testRunning = false;
+}
+
+void debug(){
+	//Serial.println("Debugando");
+	amostra();
+}
+
+void setPWM(uint16_t currentPWM){
+	if (currentPWM > max_PWM) currentPWM = max_PWM;
+	if (currentPWM < min_PWM) currentPWM = min_PWM;
+	currentPWM = Inverte_PWM ? (min_PWM + max_PWM - currentPWM) : currentPWM;
+	esc.writeMicroseconds(currentPWM);
+}
+
+void showError(){
+	//Serial.println("tentando rodar issaqui");
+	for(int i = 0; i<16; i++){
+		digitalWrite(LED, !digitalRead(LED));
+		delay(100);
+	}
+}
+
+void openNewLog(){
+	closeCurrentLog();
+	digitalWrite(LED, HIGH);
+	int idx = 1;
+	String path;
+	do{
+		path = "LOGs/LOG" + String(idx) + ".CSV";
+		idx++;
+	} while(SD.exists(path));
+		
+	logfile = SD.open(path, FILE_WRITE);
+	if (!logfile){
+		showError();
+		return;
+	}
+	
+	String header = "t[ms], PWM[us]";
+	for (auto sensor : sensores){
+		sensor -> calibra();
+		header += "," + sensor -> getLabel();
+	}
+	header += "\n";
+	logfile.print(header);
+	
+	digitalWrite(HX711_SCK, LOW);
+	Serial.println(path);
+	lastLog = millis();
+}
+
+void closeCurrentLog(){
+	if (logfile){
+		logfile.close();
+		digitalWrite(LED, LOW);
+	}
+	digitalWrite(HX711_SCK, HIGH);
+	//digitalWrite(LED, LOW);
+}
+
 void amostra() {
-int16_t thrust;
+	unsigned long dt = now - lastSample;
+	unsigned long elapsed = now - lastLog;
+	if (dt < sample_dt) return;
+	lastSample = now;
+	String logline = String(elapsed) + "," + String(target_PWM);
 	
 	for (auto sensor : sensores){
+		logline += "," + String(sensor->read()); 
+	}
+	logline += "\n";
+	
+	if (debugging) Serial.print(logline);
+	logfile.print(logline);
+	logfile.flush();
+}
+
+void HandleInt(){
+	if (botao){
+		unsigned long dt = now - lastInterrupt;
 		
+		if(dt > 5000 && !testRunning){
+			botao = false;
+			showError();
+			for (auto sensor : sensores){
+				sensor -> calibra();
+				digitalWrite(LED, !digitalRead(LED));
+			}
+			digitalWrite(LED, LOW);
+			lastInterrupt = millis();
+		}
+		else if(dt > 50 && !digitalRead(buttPin)){
+			botao = false;
+			lastInterrupt = millis();
+			beginTest();
+		}
 	}
 }
 
 void setup() {
-  Serial.begin(115200);              //Inicia comunicação serial Bluetooth
-    DDRD |= B10000000;             // Porta 7 output
-    //DDRB |= B00101111;             // Porta 8, 9, 10, 11, e 13 output
+	
+	esc.attach(servo_pin, min_PWM, max_PWM);
+	setPWM(1500);
+	
+	Serial.begin(115200);              //Inicia comunicação serial Bluetooth
+	
+	delay(100);
+	
+	while(Serial.available()) Serial.read(); 
 
-  Serial.println("Envie: 'd' para aumentar 10% | 'a' para diminuir 10% | '0' para parar o motor");
-
-  while(Serial.available())data = Serial.read(); //Limpa o buffer serial
-  data = 0;                                      //Zera os dados
-
-    //PCICR |= (1 << PCIE2);         // Registeador PCIE0  em alto para habilitar scaneamento da interrupção através do PCMSK0
-    //PCMSK2 |= (1 << PCINT18);      // Bit 18 do Registrador PCINT0 em alto (entrada digital 2)  para causar uma interrupção em qualquer mudança.
-    //PCMSK2 |= (1 << PCINT19);      // Bit 19 do Registrador PCINT0 em alto (entrada digital 3)  para causar uma interrupção em qualquer mudança.
+	pinMode(buttPin, INPUT);
+	pinMode(LED, OUTPUT);
+	
+	if(!SD.begin(CS_SDcard)){
+		Serial.println("Bota o cartaoo");
+		while(1){
+			showError();
+		}
+	}
+	
+	if(!SD.exists("LOGs")){
+		SD.mkdir("LOGs/");
+	}
+	
+	attachInterrupt(digitalPinToInterrupt(buttPin), button_ISR, RISING);
+	Serial.println("prontinhoo");
+	lastSample = millis();
 }
 
 void loop() {
-  if(Serial.available() > 0){
-    data = Serial.read();                               // Faz a leitura da entrada do teclado
-    delay(100);                                         // Espera a chegada dos demais bytes
-    while(Serial.available() > 0)trash = Serial.read(); // Limpa buffer serial (descarta bytes extras)
-    trash = 0;											                    // Variável para lixo da cominicação serial
-    if(data == 'd'){
-      if(esc<1500)esc += 50;
-      Serial.print("Aumenta em 10%. Atualmente está em: "); Serial.println((esc-1000)/5);
-    }
-    if(data == 'a'){
-      if(esc>1000)esc -= 50;
-      Serial.print("Diminui em 10%. Atualmente está em: "); Serial.println((esc-1000)/5);
-    }
-    if(data == '0'){
-      esc = 1000;
-      Serial.print("Esc em zerado. Atualmente está em: "); Serial.println((esc-1000)/5);
-    }
-  }
+	now = millis(); 
 
-  while(micros() - loop_timer < 20000);                  // Garante que teremos 250hz de atualização
-  loop_timer = micros();                                // Zera o contador do loop
+	ProcessSerial();
 
-  Serial.print("Leitura Balanca: "); Serial.println(Balanca.read());
+	HandleInt();
 
-  PORTD |= B10000000;                                   // Pulso alto pro ESC
-  timer_channel = esc + loop_timer;                     // Define o tempo de alto
-
-  while(PORTD >= 64){                                   // Enquanto tiver em alto
-	esc_loop_timer = micros();                            //Lê o tempo atual
-	if(timer_channel <= esc_loop_timer)PORTD &= B01111111;// Quando o atual for maior que estabelecido, coloca em baixo
-  }
+	
+	if (testRunning){
+		runTest();
+	}
+	else if (debugging){
+		debug();
+	}
 }
 
-/* ISR(PCINT2_vect){
-  if(PIND & B00000100){
-    if(esc<1500 & (millis()>button_timer)){
-      esc += 50;
-      Serial.print("Aumenta em 10%. Atualmente está em: "); Serial.println((esc-1000)/5);
-      button_timer = millis()+2000;
-    }
-  }
-  if(PIND & B00001000){
-    if (millis()>button_timer){
-      esc = 1000;
-      Serial.print("Esc em zerado. Atualmente está em: "); Serial.println((esc-1000)/5);
-      button_timer = millis()+2000;
-    }
+void button_ISR(){
+  if(PIND & (1 << PD3)){
+    //now = millis();
+	if (now - lastInterrupt > 1000 && !botao){
+		lastInterrupt = now;
+		if (testRunning){
+			endTest();
+			return;
+		}
+		botao = true;
+	}
   }
 }
- */

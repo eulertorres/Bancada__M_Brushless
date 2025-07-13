@@ -1,15 +1,17 @@
 // --- Configuração de pinos e parâmetros ---
 #include "HX711.hpp"
 
-HX711::HX711(const uint8_t PIN_DOUT, const uint8_t PIN_SCK) :
+HX711::HX711(const uint8_t PIN_DOUT, const uint8_t PIN_SCK, const String Label) :
+	Sensor(Label),
 	_PIN_DOUT(PIN_DOUT),
 	_PIN_SCK(PIN_SCK),
-	offset(1974),
+	_Label(Label),
+	offset(1974.0),
 	scale(114.6f)
 {
 	pinMode(_PIN_DOUT, INPUT);
 	pinMode(_PIN_SCK, OUTPUT);
-	digitalWrite(_PIN_SCK, LOW);	
+	digitalWrite(_PIN_SCK, HIGH);	//Modo Power-Down do HX711
 }
 
 // --- Lê uma única conversão de 24 bits e aplica seleção de ganho ---
@@ -32,6 +34,7 @@ int32_t HX711::readRaw() {
 		digitalWrite(_PIN_SCK, HIGH);
 		digitalWrite(_PIN_SCK, LOW);
 	}
+	//Serial.println(value);
 	// converte de 24 bits two’s-complement para signed long
 	if (value & 0x800000) {
 		value |= 0xFF000000;
@@ -40,15 +43,21 @@ int32_t HX711::readRaw() {
 }
 
 // --- Lê várias vezes e retorna a média ---
-int16_t HX711::read() {
+float HX711::read() {
+	//digitalWrite(4, HIGH);
 	sum = 0;
 	for (uint8_t i = 0; i < N_amostras; i++) {
 		sum += readRaw();
 	}
-	return (sum / N_amostras)/scale - offset;
+	return ((float)sum / N_amostras)/scale - offset;
 }
 
-long HX711::calibra(){
-	offset = read();
-	return offset;
+float HX711::calibra(){
+	digitalWrite(_PIN_SCK, LOW); //Modo Wake-up do HX711
+	for (uint8_t i = 0; i < 20; i++) {
+		sum += readRaw();
+	}
+	digitalWrite(_PIN_SCK, HIGH); //Modo Power-Down do HX711
+	offset = ((float)sum / 20)/scale;
+	//Serial.print("Novo offset: "); Serial.println(offset); 
 }
