@@ -1,4 +1,11 @@
-// --- Configuração de pinos e parâmetros ---
+/*
+ * CÓDIGO PARA BANCADA DE CARACTERIZAÇÃO DE GRUPO MOTOPROPULSOR DE DRONES
+ * Versão: 1.0
+ * Data: 07/2025
+ * Autor: Euler Torres
+ * * Código para leitura de força em g.f usando uma classe genérica de Sensor.
+ *
+ */
 #include "HX711.hpp"
 
 HX711::HX711(const uint8_t PIN_DOUT, const uint8_t PIN_SCK, const String Label) :

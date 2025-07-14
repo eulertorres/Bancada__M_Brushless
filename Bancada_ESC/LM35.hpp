@@ -1,3 +1,11 @@
+/*
+ * CÓDIGO PARA BANCADA DE CARACTERIZAÇÃO DE GRUPO MOTOPROPULSOR DE DRONES
+ * Versão: 1.0
+ * Data: 07/2025
+ * Autor: Euler Torres
+ * * Código para leitura de temperatura °C usando uma classe genérica de Sensor.
+ *
+ */
 #pragma once
 #include <stdint.h>
 

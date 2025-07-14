@@ -1,5 +1,11 @@
-// Programinha feito por Euler Torres 25_05_25
-// Bancada de teste propulsão
+/*
+ * CÓDIGO PARA BANCADA DE CARACTERIZAÇÃO DE GRUPO MOTOPROPULSOR DE DRONES
+ * Versão: 2.0
+ * Data: 07/2025
+ * Autor: Euler Torres
+ * * Esse código salva um csv com leitura de RPM, corrente (ESC), tração hélice, temperatura motor, temperatura ambiente e tensão da bateria.
+ * O teste consiste em subir o PWM em 10% e capturar diversas amostras, fazendo uma mapa completo do motor/bateria/hélice
+ */
 #include <Arduino.h>
 #include <Servo.h>
 #include <SD.h>
@@ -13,6 +19,7 @@
 //=============================================================================
 // 						Definição dos pinos
 //=============================================================================
+const uint8_t RPM_PIN	{2};
 const uint8_t buttPin	{3};
 const uint8_t HX711_DOUT{4};
 const uint8_t HX711_SCK	{5};
@@ -54,7 +61,8 @@ volatile bool botao = false;
 //=============================================================================
 
 // Controle de Tempo ------------------------------------------------
-unsigned long now, lastInterrupt;
+unsigned long now;
+volatile unsigned long lastInterrupt;
 
 // ---------------------  Controle do ESC   -------------------------
 uint16_t sample_dt = 500, min_PWM = 1500, max_PWM = 2000;
@@ -66,13 +74,15 @@ bool Inverte_PWM = false;
 unsigned long lastSample, lastLog;
 File logfile;
 char data;
-
+// ---------------------        RPM		------------------------------------------------
+const int N_pas =	2;
+volatile unsigned long contadorPulsos = 0;
 // ---------------------       Debug	------------------------------------------------
 bool debugging = false;
 // ---------------------       Teste    ------------------------------------------------
 bool testRunning = false;
 uint16_t  target_PWM = 1500, ms_increasse = 80, targetPWMsample= 1500;
-unsigned long lastPWMUpdate, sampleTime = 5000;
+unsigned long lastPWMUpdate, sampleTime = 6000;
 
 //=============================================================================
 // 						Funções auxiliares
@@ -186,6 +196,7 @@ void openNewLog(){
 	
 	digitalWrite(HX711_SCK, LOW);
 	Serial.println(path);
+	contadorPulsos = 0;
 	lastLog = millis();
 }
 
@@ -208,7 +219,14 @@ void amostra() {
 	for (auto sensor : sensores){
 		logline += "," + String(sensor->read()); 
 	}
-	logline += "\n";
+	
+	noInterrupts();
+	float rpm = ((60000.0 / dt) * contadorPulsos) / N_pas;
+	contadorPulsos = 0;
+	interrupts();
+	
+	if (debugging) logline += "," + String(contadorPulsos);
+	logline += "," + String(rpm) + "\n";
 	
 	if (debugging) Serial.print(logline);
 	logfile.print(logline);
@@ -219,7 +237,9 @@ void HandleInt(){
 	if (botao){
 		unsigned long dt = now - lastInterrupt;
 		
-		if(dt > 5000 && !testRunning){
+		if (dt < 200) return;	//Minimo para estabilizar nivel lógico
+		//lastInterrupt = now;
+		if(dt > 5000 && !testRunning && digitalRead(buttPin)){
 			botao = false;
 			showError();
 			for (auto sensor : sensores){
@@ -229,10 +249,11 @@ void HandleInt(){
 			digitalWrite(LED, LOW);
 			lastInterrupt = millis();
 		}
-		else if(dt > 50 && !digitalRead(buttPin)){
+		else if(!digitalRead(buttPin)){
 			botao = false;
 			lastInterrupt = millis();
-			beginTest();
+			if(!testRunning)	beginTest();
+			else endTest();
 		}
 	}
 }
@@ -249,6 +270,7 @@ void setup() {
 	while(Serial.available()) Serial.read(); 
 
 	pinMode(buttPin, INPUT);
+	pinMode(RPM_PIN, INPUT);
 	pinMode(LED, OUTPUT);
 	
 	if(!SD.begin(CS_SDcard)){
@@ -263,6 +285,7 @@ void setup() {
 	}
 	
 	attachInterrupt(digitalPinToInterrupt(buttPin), button_ISR, RISING);
+	attachInterrupt(digitalPinToInterrupt(RPM_PIN), pulso_ISR, FALLING);
 	Serial.println("prontinhoo");
 	lastSample = millis();
 }
@@ -284,15 +307,10 @@ void loop() {
 }
 
 void button_ISR(){
-  if(PIND & (1 << PD3)){
-    //now = millis();
-	if (now - lastInterrupt > 1000 && !botao){
-		lastInterrupt = now;
-		if (testRunning){
-			endTest();
-			return;
-		}
-		botao = true;
-	}
-  }
+	botao = true;
+	lastInterrupt = millis();
+}
+
+void pulso_ISR() {
+	contadorPulsos++;
 }

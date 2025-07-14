@@ -1,3 +1,11 @@
+/*
+ * CÓDIGO PARA BANCADA DE CARACTERIZAÇÃO DE GRUPO MOTOPROPULSOR DE DRONES
+ * Versão: 1.0
+ * Data: 07/2025
+ * Autor: Euler Torres
+ * * Classe genérica de sensor
+ *
+ */
 #pragma once
 #include <stdint.h>
 #include <Arduino.h>
