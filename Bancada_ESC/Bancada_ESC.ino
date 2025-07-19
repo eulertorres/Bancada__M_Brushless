@@ -65,7 +65,7 @@ unsigned long now;
 volatile unsigned long lastInterrupt;
 
 // ---------------------  Controle do ESC   -------------------------
-uint16_t sample_dt = 500, min_PWM = 1500, max_PWM = 2000;
+uint16_t sample_dt = 500, min_PWM = 1500, max_PWM = 2000, currentPWM = min_PWM;
 uint8_t	 step_PWM = 1;
 Servo esc;
 bool Inverte_PWM = false;
@@ -139,13 +139,12 @@ void runTest(){
 		amostra();
 		if (now - lastPWMUpdate >= sampleTime) endTest();
 	}
-	//Serial.println(target_PWM);
 	setPWM(target_PWM);	
 }
 
 void endTest(){
 	target_PWM = min_PWM;	
-	setPWM(min_PWM);
+	rampPWM(min_PWM, 5);
 	closeCurrentLog();
 	testRunning = false;
 }
@@ -155,11 +154,29 @@ void debug(){
 	amostra();
 }
 
-void setPWM(uint16_t currentPWM){
-	if (currentPWM > max_PWM) currentPWM = max_PWM;
-	if (currentPWM < min_PWM) currentPWM = min_PWM;
-	currentPWM = Inverte_PWM ? (min_PWM + max_PWM - currentPWM) : currentPWM;
-	esc.writeMicroseconds(currentPWM);
+void setPWM(uint16_t PWM){
+	currentPWM = PWM;
+	if (PWM > max_PWM) PWM = max_PWM;
+	if (PWM < min_PWM) PWM = min_PWM;
+	PWM = Inverte_PWM ? (min_PWM + max_PWM - PWM) : PWM;
+	esc.writeMicroseconds(PWM);
+}
+
+void rampPWM(uint16_t target, uint8_t passo){
+	uint8_t delayMs = 20;
+	if (target > currentPWM){
+		// acelera
+		while(target - currentPWM > 0){
+			setPWM(currentPWM + passo);
+			delay(delayMs);
+		}
+	}else{
+		// desacelera
+		while(currentPWM - target > 0){
+			setPWM(currentPWM - passo);
+			delay(delayMs);
+		}
+	}
 }
 
 void showError(){
@@ -191,13 +208,13 @@ void openNewLog(){
 		sensor -> calibra();
 		header += "," + sensor -> getLabel();
 	}
-	header += "\n";
+	header += ",RPM\n";
 	logfile.print(header);
 	
 	digitalWrite(HX711_SCK, LOW);
 	Serial.println(path);
 	contadorPulsos = 0;
-	lastLog = millis();
+	lastLog = now;
 }
 
 void closeCurrentLog(){
