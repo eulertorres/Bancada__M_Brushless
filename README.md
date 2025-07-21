@@ -4,4 +4,4 @@ O teste consiste em subir o PWM em 10% e capturar diversas amostras, fazendo uma
 
 Nossa mas ficou dificil ver o GND ;-; colocar aqui o esquematico que dói o olho.
 
-![esquematico_Fundo_branco](https://github.com/user-attachments/assets/d95b7448-1469-4092-966b-b46b3d375da4)
+![esquematico_Fundo_branco](https://github.com/user-attachments/assets/cfc2913d-6771-44bf-b9b7-bee8364b489c)
