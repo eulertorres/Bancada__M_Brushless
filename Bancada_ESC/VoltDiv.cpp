@@ -12,7 +12,7 @@ VoltDiv::VoltDiv(const uint8_t AnPin, const String Label) :
 	Sensor(Label),
 	_AnPin(AnPin),
 	_Label(Label),
-	scale(3.36f)	//		16.8 * R2/(R1+R2)= 5V	
+	scale(3.36f)	//		16.8 * R2/(R1+R2)= 5V	R1 = 10kΩ R2 = 4.230kΩ
 	//offset(0.0f)
 {
 	pinMode(_AnPin, INPUT);

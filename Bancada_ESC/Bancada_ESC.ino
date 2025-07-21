@@ -19,7 +19,7 @@
 //=============================================================================
 // 						Definição dos pinos
 //=============================================================================
-const uint8_t RPM_PIN	{2};
+const uint8_t RPM_PIN	{2};	//TCRT5000
 const uint8_t buttPin	{3};
 const uint8_t HX711_DOUT{4};
 const uint8_t HX711_SCK	{5};
